@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canny Edge Detector</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #eef2f7;
+    text-align: center;
+    padding: 20px;
+}
+.container {
+    max-width: 1000px;
+    margin: auto;
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+}
+h1 { color: #1d4ed8; }
+.controls { margin: 20px; }
+label { display: block; margin: 12px; }
+input { padding: 8px; margin: 5px; }
+button {
+    padding: 10px 18px;
+    margin: 8px;
+    border: none;
+    border-radius: 6px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}
+.images {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+.images div { width: 45%; min-width: 260px; }
+canvas {
+    width: 100%;
+    height: auto;
+    border: 1px solid #ccc;
+}
+#status { color: #334155; }
+</style>
+</head>
+
+<body>
+<div class="container">
+    <h1>Canny Edge Detector</h1>
+    <p>Phát hiện đường biên trong ảnh bằng JavaScript</p>
+
+    <input type="file" id="imageInput" accept="image/*">
+
+    <div class="controls">
+        <label>
+            Sigma Gaussian:
+            <input type="number" id="sigma" value="1.4"
+                   min="0.5" max="3" step="0.1">
+        </label>
+
+        <label>
+            Ngưỡng thấp:
+            <input type="number" id="low" value="50"
+                   min="0" max="255">
+        </label>
+
+        <label>
+            Ngưỡng cao:
+            <input type="number" id="high" value="150"
+                   min="0" max="255">
+        </label>
+
+        <button id="runButton" disabled>Chạy Canny</button>
+        <button id="downloadButton" disabled>Tải ảnh cạnh</button>
+    </div>
+
+    <div class="images">
+        <div>
+            <h3>Ảnh gốc</h3>
+            <canvas id="originalCanvas"></canvas>
+        </div>
+        <div>
+            <h3>Ảnh sau Canny</h3>
+            <canvas id="edgeCanvas"></canvas>
+        </div>
+    </div>
+
+    <p id="status">Vui lòng chọn ảnh.</p>
+</div>
+
+<script>
+const input = document.getElementById("imageInput");
+const originalCanvas = document.getElementById("originalCanvas");
+const edgeCanvas = document.getElementById("edgeCanvas");
+const originalCtx = originalCanvas.getContext("2d");
+const edgeCtx = edgeCanvas.getContext("2d");
+const statusText = document.getElementById("status");
+const runButton = document.getElementById("runButton");
+const downloadButton = document.getElementById("downloadButton");
+
+let imageLoaded = false;
+let resultReady = false;
+
+// Đọc ảnh từ máy tính
+input.addEventListener("change", function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+        statusText.textContent = "Vui lòng chọn tệp ảnh hợp lệ.";
+        return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = function() {
+        const scale = Math.min(
+            1,
+            1000 / Math.max(img.naturalWidth, img.naturalHeight)
+        );
+
+        const width = Math.max(1, Math.round(img.naturalWidth * scale));
+        const height = Math.max(1, Math.round(img.naturalHeight * scale));
+
+        originalCanvas.width = edgeCanvas.width = width;
+        originalCanvas.height = edgeCanvas.height = height;
+
+        originalCtx.drawImage(img, 0, 0, width, height);
+
+        imageLoaded = true;
+        resultReady = false;
+        runButton.disabled = false;
+        downloadButton.disabled = true;
+
+        statusText.textContent = "Đã tải ảnh. Nhấn Chạy Canny.";
+        URL.revokeObjectURL(url);
+    };
+
+    img.onerror = function() {
+        statusText.textContent = "Không thể đọc ảnh.";
+        URL.revokeObjectURL(url);
+    };
+
+    img.src = url;
+});
+
+// Tạo bộ lọc Gaussian
+function gaussianKernel(sigma) {
+    const radius = Math.max(1, Math.ceil(3 * sigma));
+    const kernel = [];
+    let sum = 0;
+
+    for (let i = -radius; i <= radius; i++) {
+        const value = Math.exp(-(i * i) / (2 * sigma * sigma));
+        kernel.push(value);
+        sum += value;
+    }
+
+    return {
+        kernel: kernel.map(value => value / sum),
+        radius: radius
+    };
+}
+
+// Làm mờ Gaussian
+function gaussianBlur(src, width, height, sigma) {
+    const {kernel, radius} = gaussianKernel(sigma);
+    const temp = new Float32Array(src.length);
+    const result = new Float32Array(src.length);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let sum = 0;
+
+            for (let k = -radius; k <= radius; k++) {
+                const xx = Math.max(0, Math.min(width - 1, x + k));
+                sum += src[y * width + xx] * kernel[k + radius];
+            }
+
+            temp[y * width + x] = sum;
+        }
+    }
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let sum = 0;
+
+            for (let k = -radius; k <= radius; k++) {
+                const yy = Math.max(0, Math.min(height - 1, y + k));
+                sum += temp[yy * width + x] * kernel[k + radius];
+            }
+
+            result[y * width + x] = sum;
+        }
+    }
+
+    return result;
+}
+
+// Thuật toán Canny
+function canny(imageData, width, height, sigma, low, high) {
+    const size = width * height;
+    const gray = new Float32Array(size);
+
+    // 1. Chuyển ảnh RGB sang ảnh xám
+    for (let i = 0; i < size; i++) {
+        const p = i * 4;
+        gray[i] =
+            0.299 * imageData[p] +
+            0.587 * imageData[p + 1] +
+            0.114 * imageData[p + 2];
+    }
+
+    // 2. Giảm nhiễu bằng Gaussian
+    const blurred = gaussianBlur(gray, width, height, sigma);
+    const gx = new Float32Array(size);
+    const gy = new Float32Array(size);
+    const mag = new Float32Array(size);
+    const angle = new Float32Array(size);
+
+    const sx = [-1,0,1,-2,0,2,-1,0,1];
+    const sy = [-1,-2,-1,0,0,0,1,2,1];
+
+    // 3. Tính gradient Sobel
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            let sumX = 0, sumY = 0, k = 0;
+
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const value = blurred[(y + dy) * width + x + dx];
+                    sumX += value * sx[k];
+                    sumY += value * sy[k];
+                    k++;
+                }
+            }
+
+            const i = y * width + x;
+            gx[i] = sumX;
+            gy[i] = sumY;
+            mag[i] = Math.hypot(sumX, sumY);
+
+            angle[i] = Math.atan2(sumY, sumX) * 180 / Math.PI;
+            if (angle[i] < 0) angle[i] += 180;
+        }
+    }
+
+    // 4. Non-Maximum Suppression
+    const thin = new Float32Array(size);
+
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            const i = y * width + x;
+            const a = angle[i];
+            let n1, n2;
+
+            if (a < 22.5 || a >= 157.5) {
+                n1 = mag[i - 1];
+                n2 = mag[i + 1];
+            } else if (a < 67.5) {
+                n1 = mag[i - width + 1];
+                n2 = mag[i + width - 1];
+            } else if (a < 112.5) {
+                n1 = mag[i - width];
+                n2 = mag[i + width];
+            } else {
+                n1 = mag[i - width - 1];
+                n2 = mag[i + width + 1];
+            }
+
+            if (mag[i] >= n1 && mag[i] >= n2) {
+                thin[i] = mag[i];
+            }
+        }
+    }
+
+    // 5. Ngưỡng kép
+    const WEAK = 75;
+    const STRONG = 255;
+    const labels = new Uint8Array(size);
+
+    for (let i = 0; i < size; i++) {
+        if (thin[i] >= high) labels[i] = STRONG;
+        else if (thin[i] >= low) labels[i] = WEAK;
+    }
+
+    // 6. Theo dõi cạnh bằng hysteresis
+    const stack = [];
+
+    for (let i = 0; i < size; i++) {
+        if (labels[i] === STRONG) stack.push(i);
+    }
+
+    while (stack.length) {
+        const i = stack.pop();
+        const x = i % width;
+        const y = Math.floor(i / width);
+
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+
+                const xx = x + dx;
+                const yy = y + dy;
+
+                if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+
+                const j = yy * width + xx;
+
+                if (labels[j] === WEAK) {
+                    labels[j] = STRONG;
+                    stack.push(j);
+                }
+            }
+        }
+    }
+
+    // Tạo ảnh cạnh đen trắng
+    const output = new Uint8ClampedArray(size * 4);
+
+    for (let i = 0; i < size; i++) {
+        const value = labels[i] === STRONG ? 255 : 0;
+        const p = i * 4;
+
+        output[p] = value;
+        output[p + 1] = value;
+        output[p + 2] = value;
+        output[p + 3] = 255;
+    }
+
+    return new ImageData(output, width, height);
+}
+
+// Chạy Canny
+runButton.addEventListener("click", function() {
+    if (!imageLoaded) {
+        statusText.textContent = "Vui lòng chọn ảnh trước.";
+        return;
+    }
+
+    let low = Number(document.getElementById("low").value);
+    let high = Number(document.getElementById("high").value);
+    const sigma = Number(document.getElementById("sigma").value);
+
+    if (!Number.isFinite(low) || !Number.isFinite(high) ||
+        low < 0 || high < 0 || low > 255 || high > 255) {
+        statusText.textContent = "Hai ngưỡng phải từ 0 đến 255.";
+        return;
+    }
+
+    if (!Number.isFinite(sigma) || sigma < 0.5 || sigma > 3) {
+        statusText.textContent = "Sigma phải từ 0.5 đến 3.";
+        return;
+    }
+
+    if (low > high) {
+        [low, high] = [high, low];
+        document.getElementById("low").value = low;
+        document.getElementById("high").value = high;
+    }
+
+    try {
+        const width = originalCanvas.width;
+        const height = originalCanvas.height;
+        const data = originalCtx.getImageData(0, 0, width, height);
+        const result = canny(data.data, width, height, sigma, low, high);
+
+        edgeCtx.putImageData(result, 0, 0);
+        resultReady = true;
+        downloadButton.disabled = false;
+        statusText.textContent =
+            `Hoàn tất! Sigma = ${sigma}, ngưỡng thấp = ${low}, ngưỡng cao = ${high}.`;
+    } catch (error) {
+        console.error(error);
+        statusText.textContent = "Lỗi xử lý ảnh: " + error.message;
+    }
+});
+
+// Tải ảnh kết quả
+downloadButton.addEventListener("click", function() {
+    if (!resultReady) return;
+
+    const link = document.createElement("a");
+    link.download = "canny_edges.png";
+    link.href = edgeCanvas.toDataURL("image/png");
+    link.click();
+});
+</script>
+</body>
+</html>
