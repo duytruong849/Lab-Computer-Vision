@@ -1,0 +1,7 @@
+﻿--extra-index-url https://download.pytorch.org/whl/cu134
+torch
+torchvision
+facenet-pytorch
+opencv-python
+pillow
+numpy>=2.0.0
