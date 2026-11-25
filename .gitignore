@@ -6,3 +6,4 @@ temp_improved/
 coil-100/
 processed/
 outputs/image_pairs_backup.csv
+**/image_pairs_backup.csv
