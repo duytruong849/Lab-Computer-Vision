@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 2 – Xử Lý Ảnh: Toán Tử Điểm Ảnh & Bộ Lọc</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #eef2f7;
+    color: #1e293b;
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+}
+.container {
+    max-width: 1100px;
+    margin: auto;
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+h1 {
+    color: #1d4ed8;
+    margin-bottom: 6px;
+}
+.subtitle {
+    color: #475569;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+.controls {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px;
+    margin: 20px 0;
+}
+.row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin: 10px 0;
+}
+label {
+    font-weight: 600;
+    font-size: 14px;
+    color: #334155;
+}
+select, input[type="number"], input[type="file"] {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+}
+input[type="range"] {
+    vertical-align: middle;
+}
+.param-panel {
+    display: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #cbd5e1;
+}
+.param-panel.active {
+    display: block;
+}
+.kernel-grid {
+    display: inline-grid;
+    grid-template-columns: repeat(3, 68px);
+    gap: 6px;
+    margin: 8px auto;
+}
+.kernel-grid input {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    padding: 6px;
+}
+button {
+    padding: 10px 18px;
+    margin: 4px;
+    border: none;
+    border-radius: 6px;
+    background: #2563eb;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+button:hover:not(:disabled) {
+    background: #1d4ed8;
+}
+button.secondary {
+    background: #0f766e;
+}
+button.secondary:hover:not(:disabled) {
+    background: #115e59;
+}
+button.outline {
+    background: #475569;
+}
+button.outline:hover:not(:disabled) {
+    background: #334155;
+}
+button:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+}
+.images {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 16px;
+}
+.images .card {
+    width: 47%;
+    min-width: 280px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    box-sizing: border-box;
+}
+.images h3 {
+    margin: 4px 0 10px;
+    color: #1e293b;
+}
+canvas {
+    width: 100%;
+    height: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+}
+.metrics {
+    margin-top: 14px;
+    font-size: 14px;
+    color: #1e293b;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: inline-block;
+}
+#status {
+    color: #334155;
+    font-weight: 500;
+    margin-top: 14px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+    <h1>Lab 2 – Xử Lý Ảnh Trong Miền Không Gian</h1>
+    <p class="subtitle">Toán tử điểm ảnh • Lọc tuyến tính • Phát hiện cạnh • Lọc phi tuyến tính</p>
+
+    <div class="row">
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="noiseButton" class="outline" disabled>Thêm nhiễu muối tiêu (4%)</button>
+        <button id="resetButton" class="outline" disabled>Khôi phục ảnh gốc</button>
+    </div>
+
+    <div class="controls">
+        <div class="row">
+            <label for="operationSelect">Phương pháp xử lý:</label>
+            <select id="operationSelect">
+                <optgroup label="I. Toán Tử Điểm Ảnh">
+                    <option value="brightness">1. Thay đổi độ sáng (Brightness)</option>
+                    <option value="contrast">2. Thay đổi độ tương phản (Contrast)</option>
+                    <option value="negative">3. Biến đổi âm bản (Negative)</option>
+                    <option value="threshold">4. Cắt ngưỡng nhị phân (Thresholding)</option>
+                </optgroup>
+                <optgroup label="II. Lọc Tuyến Tính">
+                    <option value="mean">1. Lọc trung bình (Mean / Box Filter)</option>
+                    <option value="gaussian">2. Lọc Gaussian (Gaussian Blur)</option>
+                    <option value="sharpen1">3a. Làm sắc nét – Kernel tâm 5 (4 lân cận)</option>
+                    <option value="sharpen2">3b. Làm sắc nét – Kernel tâm 9 (8 lân cận)</option>
+                </optgroup>
+                <optgroup label="III. Bài Tập Nâng Cao">
+                    <option value="sobel">1a. Phát hiện cạnh Sobel (X + Y)</option>
+                    <option value="prewitt">1b. Phát hiện cạnh Prewitt (X + Y)</option>
+                    <option value="custom_kernel">2. Tự thiết kế Kernel 3x3 (K1–K6 & Tùy chỉnh)</option>
+                    <option value="median">4a. Lọc phi tuyến: Trung vị (Median Filter)</option>
+                    <option value="bilateral">4b. Lọc phi tuyến: Song phương (Bilateral Filter)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <!-- Tham số Độ sáng -->
+        <div id="param-brightness" class="param-panel active">
+            <div class="row">
+                <label>Giá trị cộng/trừ độ sáng (-150 đến +150):</label>
+                <input type="range" id="brightnessRange" min="-150" max="150" value="20">
+                <input type="number" id="brightnessVal" min="-150" max="150" value="20" style="width:70px">
+            </div>
+        </div>
+
+        <!-- Tham số Độ tương phản -->
+        <div id="param-contrast" class="param-panel">
+            <div class="row">
+                <label>Hệ số nhân tương phản (0.1 đến 3.0):</label>
+                <input type="range" id="contrastRange" min="0.1" max="3.0" step="0.1" value="1.5">
+                <input type="number" id="contrastVal" min="0.1" max="3.0" step="0.1" value="1.5" style="width:70px">
+            </div>
+        </div>
+
+        <!-- Tham số Cắt ngưỡng -->
+        <div id="param-threshold" class="param-panel">
+            <div class="row">
+                <label>Ngưỡng nhị phân T (0 đến 255):</label>
+                <input type="range" id="thresholdRange" min="0" max="255" value="128">
+                <input type="number" id="thresholdVal" min="0" max="255" value="128" style="width:70px">
+            </div>
+        </div>
+
+        <!-- Tham số Lọc trung bình / Median -->
+        <div id="param-ksize" class="param-panel">
+            <div class="row">
+                <label>Kích thước cửa sổ lọc (số lẻ):</label>
+                <select id="ksizeSelect">
+                    <option value="3">3 x 3</option>
+                    <option value="5" selected>5 x 5</option>
+                    <option value="7">7 x 7</option>
+                    <option value="9">9 x 9</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tham số Lọc Gaussian -->
+        <div id="param-gaussian" class="param-panel">
+            <div class="row">
+                <label>Sigma Gaussian (0.5 đến 10):</label>
+                <input type="number" id="gaussianSigma" min="0.5" max="10" step="0.5" value="2.0" style="width:70px">
+            </div>
+        </div>
+
+        <!-- Tham số Kernel tùy chỉnh -->
+        <div id="param-custom" class="param-panel">
+            <div class="row">
+                <label>Mẫu Kernel trong Lab 2:</label>
+                <select id="presetKernel">
+                    <option value="k1">Kernel 1 – Chạm nổi (Emboss)</option>
+                    <option value="k2">Kernel 2 – Nhấn cạnh hướng phải</option>
+                    <option value="k3">Kernel 3 – Biên dọc hướng trái</option>
+                    <option value="k4">Kernel 4 – Biên ngang hướng trên</option>
+                    <option value="k5">Kernel 5 – Cạnh chéo đối xứng</option>
+                    <option value="k6">Kernel 6 – Laplacian 4 hướng</option>
+                </select>
+            </div>
+            <div class="kernel-grid" id="kernelInputs">
+                <input type="number" step="0.1" value="-2">
+                <input type="number" step="0.1" value="-1">
+                <input type="number" step="0.1" value="0">
+                <input type="number" step="0.1" value="-1">
+                <input type="number" step="0.1" value="1">
+                <input type="number" step="0.1" value="1">
+                <input type="number" step="0.1" value="0">
+                <input type="number" step="0.1" value="1">
+                <input type="number" step="0.1" value="2">
+            </div>
+        </div>
+
+        <!-- Tham số Bilateral -->
+        <div id="param-bilateral" class="param-panel">
+            <div class="row">
+                <label>Đường kính d:</label>
+                <input type="number" id="biDiameter" min="3" max="11" step="2" value="5" style="width:60px">
+                <label>Sigma Color:</label>
+                <input type="number" id="biSigmaColor" min="10" max="150" step="5" value="75" style="width:65px">
+                <label>Sigma Space:</label>
+                <input type="number" id="biSigmaSpace" min="10" max="150" step="5" value="75" style="width:65px">
+            </div>
+        </div>
+
+        <div class="row" style="margin-top: 14px;">
+            <button id="runButton" disabled>Áp dụng xử lý</button>
+            <button id="downloadButton" class="secondary" disabled>Tải ảnh kết quả</button>
+        </div>
+    </div>
+
+    <div class="images">
+        <div class="card">
+            <h3>Ảnh đầu vào</h3>
+            <canvas id="originalCanvas"></canvas>
+        </div>
+        <div class="card">
+            <h3 id="resultTitle">Ảnh sau xử lý</h3>
+            <canvas id="resultCanvas"></canvas>
+        </div>
+    </div>
+
+    <div id="metricsBox" class="metrics" style="display:none;"></div>
+    <p id="status">Đang tải ảnh mẫu lab2_pic.jpg hoặc vui lòng chọn ảnh từ máy tính.</p>
+</div>
+
+<script>
+const input = document.getElementById("imageInput");
+const operationSelect = document.getElementById("operationSelect");
+const originalCanvas = document.getElementById("originalCanvas");
+const resultCanvas = document.getElementById("resultCanvas");
+const originalCtx = originalCanvas.getContext("2d");
+const resultCtx = resultCanvas.getContext("2d");
+const statusText = document.getElementById("status");
+const metricsBox = document.getElementById("metricsBox");
+const resultTitle = document.getElementById("resultTitle");
+const runButton = document.getElementById("runButton");
+const downloadButton = document.getElementById("downloadButton");
+const noiseButton = document.getElementById("noiseButton");
+const resetButton = document.getElementById("resetButton");
+
+let cleanImageData = null;
+let imageLoaded = false;
+let resultReady = false;
+
+const PRESET_KERNELS = {
+    k1: [-2, -1, 0, -1, 1, 1, 0, 1, 2],
+    k2: [-1, 1, 0, -1, 1, 2, -1, 1, 0],
+    k3: [1, -1, 0, 1, -1, -1, 1, -1, 0],
+    k4: [1, 1, 1, -1, -1, -1, 0, -1, 0],
+    k5: [-2, 0.1, 2, 2, 0, -2, -2, 0.1, 2],
+    k6: [0, 1, 0, 1, -4, 1, 0, 1, 0]
+};
+
+// Đồng bộ slider và ô nhập số
+function bindRangeAndNumber(rangeId, numId) {
+    const r = document.getElementById(rangeId);
+    const n = document.getElementById(numId);
+    r.addEventListener("input", () => { n.value = r.value; });
+    n.addEventListener("input", () => { r.value = n.value; });
+}
+bindRangeAndNumber("brightnessRange", "brightnessVal");
+bindRangeAndNumber("contrastRange", "contrastVal");
+bindRangeAndNumber("thresholdRange", "thresholdVal");
+
+// Chuyển đổi bảng tham số theo phương pháp
+function updateParamPanels() {
+    document.querySelectorAll(".param-panel").forEach(el => el.classList.remove("active"));
+    const op = operationSelect.value;
+    if (op === "brightness") document.getElementById("param-brightness").classList.add("active");
+    else if (op === "contrast") document.getElementById("param-contrast").classList.add("active");
+    else if (op === "threshold") document.getElementById("param-threshold").classList.add("active");
+    else if (op === "mean" || op === "median") document.getElementById("param-ksize").classList.add("active");
+    else if (op === "gaussian") document.getElementById("param-gaussian").classList.add("active");
+    else if (op === "custom_kernel") document.getElementById("param-custom").classList.add("active");
+    else if (op === "bilateral") document.getElementById("param-bilateral").classList.add("active");
+}
+operationSelect.addEventListener("change", updateParamPanels);
+
+// Điền mẫu kernel 3x3
+document.getElementById("presetKernel").addEventListener("change", function() {
+    const vals = PRESET_KERNELS[this.value];
+    if (!vals) return;
+    const inputs = document.querySelectorAll("#kernelInputs input");
+    vals.forEach((v, idx) => { inputs[idx].value = v; });
+});
+
+function loadImageToCanvas(img) {
+    const maxDim = 800;
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+
+    originalCanvas.width = resultCanvas.width = width;
+    originalCanvas.height = resultCanvas.height = height;
+
+    originalCtx.drawImage(img, 0, 0, width, height);
+    const data = originalCtx.getImageData(0, 0, width, height);
+    cleanImageData = new ImageData(new Uint8ClampedArray(data.data), width, height);
+
+    imageLoaded = true;
+    runButton.disabled = false;
+    noiseButton.disabled = false;
+    resetButton.disabled = false;
+    statusText.textContent = `Đã tải ảnh (${width}×${height}). Chọn phương pháp và nhấn "Áp dụng xử lý".`;
+    runProcessing();
+}
+
+// Tự động thử nạp lab2_pic.jpg nếu cùng thư mục
+window.addEventListener("DOMContentLoaded", () => {
+    const defaultImg = new Image();
+    defaultImg.onload = () => loadImageToCanvas(defaultImg);
+    defaultImg.onerror = () => {
+        statusText.textContent = "Vui lòng chọn một tệp ảnh từ máy tính để bắt đầu.";
+    };
+    defaultImg.src = "lab2_pic.jpg";
+});
+
+input.addEventListener("change", function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+        statusText.textContent = "Vui lòng chọn tệp ảnh hợp lệ.";
+        return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+        loadImageToCanvas(img);
+        URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+        statusText.textContent = "Không thể đọc tệp ảnh.";
+        URL.revokeObjectURL(url);
+    };
+    img.src = url;
+});
+
+// Thêm nhiễu muối tiêu 4% lên ảnh đầu vào
+noiseButton.addEventListener("click", () => {
+    if (!cleanImageData) return;
+    const width = originalCanvas.width;
+    const height = originalCanvas.height;
+    const noisy = new Uint8ClampedArray(cleanImageData.data);
+    for (let i = 0; i < width * height; i++) {
+        if (Math.random() < 0.04) {
+            const val = Math.random() < 0.5 ? 255 : 0;
+            const p = i * 4;
+            noisy[p] = noisy[p + 1] = noisy[p + 2] = val;
+        }
+    }
+    originalCtx.putImageData(new ImageData(noisy, width, height), 0, 0);
+    statusText.textContent = "Đã thêm 4% nhiễu muối tiêu vào ảnh đầu vào. Hãy thử lọc Median hoặc Bilateral!";
+    runProcessing();
+});
+
+resetButton.addEventListener("click", () => {
+    if (!cleanImageData) return;
+    originalCtx.putImageData(cleanImageData, 0, 0);
+    statusText.textContent = "Đã khôi phục ảnh gốc.";
+    runProcessing();
+});
+
+function clampByte(v) {
+    return v < 0 ? 0 : (v > 255 ? 255 : Math.round(v));
+}
+
+// Tích chập 2D tổng quát trên từng kênh RGB
+function convolveRGB(src, width, height, kernel, ksize) {
+    const half = Math.floor(ksize / 2);
+    const out = new Uint8ClampedArray(src.length);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0, idx = 0;
+            for (let ky = -half; ky <= half; ky++) {
+                const yy = Math.max(0, Math.min(height - 1, y + ky));
+                for (let kx = -half; kx <= half; kx++) {
+                    const xx = Math.max(0, Math.min(width - 1, x + kx));
+                    const w = kernel[idx++];
+                    const p = (yy * width + xx) * 4;
+                    r += src[p] * w;
+                    g += src[p + 1] * w;
+                    b += src[p + 2] * w;
+                }
+            }
+            const dst = (y * width + x) * 4;
+            out[dst] = clampByte(r);
+            out[dst + 1] = clampByte(g);
+            out[dst + 2] = clampByte(b);
+            out[dst + 3] = 255;
+        }
+    }
+    return out;
+}
+
+// Lọc Gaussian tách chiều (Separable 1D) cho RGB
+function gaussianBlurRGB(src, width, height, sigma) {
+    const radius = Math.max(1, Math.ceil(3 * sigma));
+    const kernel = [];
+    let sum = 0;
+    for (let i = -radius; i <= radius; i++) {
+        const w = Math.exp(-(i * i) / (2 * sigma * sigma));
+        kernel.push(w);
+        sum += w;
+    }
+    for (let i = 0; i < kernel.length; i++) kernel[i] /= sum;
+
+    const temp = new Float32Array(src.length);
+    const out = new Uint8ClampedArray(src.length);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0;
+            for (let k = -radius; k <= radius; k++) {
+                const xx = Math.max(0, Math.min(width - 1, x + k));
+                const p = (y * width + xx) * 4;
+                const w = kernel[k + radius];
+                r += src[p] * w;
+                g += src[p + 1] * w;
+                b += src[p + 2] * w;
+            }
+            const dst = (y * width + x) * 4;
+            temp[dst] = r;
+            temp[dst + 1] = g;
+            temp[dst + 2] = b;
+        }
+    }
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let r = 0, g = 0, b = 0;
+            for (let k = -radius; k <= radius; k++) {
+                const yy = Math.max(0, Math.min(height - 1, y + k));
+                const p = (yy * width + x) * 4;
+                const w = kernel[k + radius];
+                r += temp[p] * w;
+                g += temp[p + 1] * w;
+                b += temp[p + 2] * w;
+            }
+            const dst = (y * width + x) * 4;
+            out[dst] = clampByte(r);
+            out[dst + 1] = clampByte(g);
+            out[dst + 2] = clampByte(b);
+            out[dst + 3] = 255;
+        }
+    }
+    return out;
+}
+
+// Phát hiện cạnh Sobel / Prewitt trên ảnh xám float32
+function edgeGradient(src, width, height, kx, ky) {
+    const size = width * height;
+    const gray = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+        const p = i * 4;
+        gray[i] = 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
+    }
+
+    const mag = new Float32Array(size);
+    let maxMag = 1e-8;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let gx = 0, gy = 0, idx = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                const yy = Math.max(0, Math.min(height - 1, y + dy));
+                for (let dx = -1; dx <= 1; dx++) {
+                    const xx = Math.max(0, Math.min(width - 1, x + dx));
+                    const val = gray[yy * width + xx];
+                    gx += val * kx[idx];
+                    gy += val * ky[idx];
+                    idx++;
+                }
+            }
+            const m = Math.hypot(gx, gy);
+            mag[y * width + x] = m;
+            if (m > maxMag) maxMag = m;
+        }
+    }
+
+    const out = new Uint8ClampedArray(src.length);
+    for (let i = 0; i < size; i++) {
+        const v = clampByte((mag[i] / maxMag) * 255);
+        const p = i * 4;
+        out[p] = out[p + 1] = out[p + 2] = v;
+        out[p + 3] = 255;
+    }
+    return out;
+}
+
+// Lọc trung vị (Median Filter)
+function medianFilterRGB(src, width, height, ksize) {
+    const half = Math.floor(ksize / 2);
+    const count = ksize * ksize;
+    const mid = Math.floor(count / 2);
+    const rArr = new Uint8Array(count);
+    const gArr = new Uint8Array(count);
+    const bArr = new Uint8Array(count);
+    const out = new Uint8ClampedArray(src.length);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let idx = 0;
+            for (let ky = -half; ky <= half; ky++) {
+                const yy = Math.max(0, Math.min(height - 1, y + ky));
+                for (let kx = -half; kx <= half; kx++) {
+                    const xx = Math.max(0, Math.min(width - 1, x + kx));
+                    const p = (yy * width + xx) * 4;
+                    rArr[idx] = src[p];
+                    gArr[idx] = src[p + 1];
+                    bArr[idx] = src[p + 2];
+                    idx++;
+                }
+            }
+            rArr.sort();
+            gArr.sort();
+            bArr.sort();
+            const dst = (y * width + x) * 4;
+            out[dst] = rArr[mid];
+            out[dst + 1] = gArr[mid];
+            out[dst + 2] = bArr[mid];
+            out[dst + 3] = 255;
+        }
+    }
+    return out;
+}
+
+// Lọc song phương (Bilateral Filter)
+function bilateralFilterRGB(src, width, height, diameter, sigmaColor, sigmaSpace) {
+    const half = Math.floor(diameter / 2);
+    const twoSigmaColor2 = 2 * sigmaColor * sigmaColor;
+    const twoSigmaSpace2 = 2 * sigmaSpace * sigmaSpace;
+    const out = new Uint8ClampedArray(src.length);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const centerIdx = (y * width + x) * 4;
+            const r0 = src[centerIdx], g0 = src[centerIdx + 1], b0 = src[centerIdx + 2];
+            let sumR = 0, sumG = 0, sumB = 0, sumW = 0;
+
+            for (let ky = -half; ky <= half; ky++) {
+                const yy = Math.max(0, Math.min(height - 1, y + ky));
+                for (let kx = -half; kx <= half; kx++) {
+                    const xx = Math.max(0, Math.min(width - 1, x + kx));
+                    const p = (yy * width + xx) * 4;
+                    const r = src[p], g = src[p + 1], b = src[p + 2];
+
+                    const spatialDist2 = kx * kx + ky * ky;
+                    const colorDist2 = (r - r0) * (r - r0) + (g - g0) * (g - g0) + (b - b0) * (b - b0);
+                    const w = Math.exp(-spatialDist2 / twoSigmaSpace2 - colorDist2 / twoSigmaColor2);
+
+                    sumR += r * w;
+                    sumG += g * w;
+                    sumB += b * w;
+                    sumW += w;
+                }
+            }
+            out[centerIdx] = clampByte(sumR / sumW);
+            out[centerIdx + 1] = clampByte(sumG / sumW);
+            out[centerIdx + 2] = clampByte(sumB / sumW);
+            out[centerIdx + 3] = 255;
+        }
+    }
+    return out;
+}
+
+// Tính chỉ số MAE và độ sắc nét Laplacian so với ảnh gốc
+function computeMetrics(refData, resData, width, height) {
+    const size = width * height;
+    const grayRef = new Float32Array(size);
+    const grayRes = new Float32Array(size);
+    let sumAbs = 0;
+    let sumSq = 0;
+
+    for (let i = 0; i < size; i++) {
+        const p = i * 4;
+        grayRef[i] = 0.299 * refData[p] + 0.587 * refData[p + 1] + 0.114 * refData[p + 2];
+        grayRes[i] = 0.299 * resData[p] + 0.587 * resData[p + 1] + 0.114 * resData[p + 2];
+        const diff = grayRes[i] - grayRef[i];
+        sumAbs += Math.abs(diff);
+        sumSq += diff * diff;
+    }
+
+    // Phương sai Laplacian trên ảnh kết quả
+    let lapSum = 0, lapSqSum = 0, count = 0;
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            const i = y * width + x;
+            const lap = grayRes[i - width] + grayRes[i + width] + grayRes[i - 1] + grayRes[i + 1] - 4 * grayRes[i];
+            lapSum += lap;
+            lapSqSum += lap * lap;
+            count++;
+        }
+    }
+    const meanLap = lapSum / Math.max(1, count);
+    const varLap = (lapSqSum / Math.max(1, count)) - meanLap * meanLap;
+
+    return {
+        mae: (sumAbs / size).toFixed(2),
+        mse: (sumSq / size).toFixed(2),
+        sharpness: varLap.toFixed(2)
+    };
+}
+
+function runProcessing() {
+    if (!imageLoaded) return;
+
+    const t0 = performance.now();
+    const width = originalCanvas.width;
+    const height = originalCanvas.height;
+    const srcData = originalCtx.getImageData(0, 0, width, height).data;
+    let out = new Uint8ClampedArray(srcData.length);
+    const op = operationSelect.value;
+
+    if (op === "brightness") {
+        const delta = Number(document.getElementById("brightnessVal").value) || 0;
+        for (let i = 0; i < srcData.length; i += 4) {
+            out[i] = clampByte(srcData[i] + delta);
+            out[i + 1] = clampByte(srcData[i + 1] + delta);
+            out[i + 2] = clampByte(srcData[i + 2] + delta);
+            out[i + 3] = 255;
+        }
+    } else if (op === "contrast") {
+        const factor = Number(document.getElementById("contrastVal").value) || 1.0;
+        for (let i = 0; i < srcData.length; i += 4) {
+            out[i] = clampByte(srcData[i] * factor);
+            out[i + 1] = clampByte(srcData[i + 1] * factor);
+            out[i + 2] = clampByte(srcData[i + 2] * factor);
+            out[i + 3] = 255;
+        }
+    } else if (op === "negative") {
+        for (let i = 0; i < srcData.length; i += 4) {
+            out[i] = 255 - srcData[i];
+            out[i + 1] = 255 - srcData[i + 1];
+            out[i + 2] = 255 - srcData[i + 2];
+            out[i + 3] = 255;
+        }
+    } else if (op === "threshold") {
+        const T = Number(document.getElementById("thresholdVal").value) || 128;
+        for (let i = 0; i < srcData.length; i += 4) {
+            const gray = 0.299 * srcData[i] + 0.587 * srcData[i + 1] + 0.114 * srcData[i + 2];
+            const bin = gray >= T ? 255 : 0;
+            out[i] = out[i + 1] = out[i + 2] = bin;
+            out[i + 3] = 255;
+        }
+    } else if (op === "mean") {
+        const ksize = Number(document.getElementById("ksizeSelect").value) || 5;
+        const w = 1 / (ksize * ksize);
+        const kernel = new Array(ksize * ksize).fill(w);
+        out = convolveRGB(srcData, width, height, kernel, ksize);
+    } else if (op === "gaussian") {
+        const sigma = Math.max(0.5, Math.min(10, Number(document.getElementById("gaussianSigma").value) || 2.0));
+        out = gaussianBlurRGB(srcData, width, height, sigma);
+    } else if (op === "sharpen1") {
+        out = convolveRGB(srcData, width, height, [0, -1, 0, -1, 5, -1, 0, -1, 0], 3);
+    } else if (op === "sharpen2") {
+        out = convolveRGB(srcData, width, height, [-1, -1, -1, -1, 9, -1, -1, -1, -1], 3);
+    } else if (op === "sobel") {
+        out = edgeGradient(
+            srcData, width, height,
+            [-1, 0, 1, -2, 0, 2, -1, 0, 1],
+            [-1, -2, -1, 0, 0, 0, 1, 2, 1]
+        );
+    } else if (op === "prewitt") {
+        out = edgeGradient(
+            srcData, width, height,
+            [-1, 0, 1, -1, 0, 1, -1, 0, 1],
+            [-1, -1, -1, 0, 0, 0, 1, 1, 1]
+        );
+    } else if (op === "custom_kernel") {
+        const inputs = document.querySelectorAll("#kernelInputs input");
+        const kernel = Array.from(inputs).map(el => Number(el.value) || 0);
+        out = convolveRGB(srcData, width, height, kernel, 3);
+    } else if (op === "median") {
+        const ksize = Number(document.getElementById("ksizeSelect").value) || 5;
+        out = medianFilterRGB(srcData, width, height, ksize);
+    } else if (op === "bilateral") {
+        const d = Math.max(3, Math.min(11, Number(document.getElementById("biDiameter").value) || 5));
+        const sc = Number(document.getElementById("biSigmaColor").value) || 75;
+        const ss = Number(document.getElementById("biSigmaSpace").value) || 75;
+        out = bilateralFilterRGB(srcData, width, height, d, sc, ss);
+    }
+
+    resultCtx.putImageData(new ImageData(out, width, height), 0, 0);
+    resultReady = true;
+    downloadButton.disabled = false;
+
+    const elapsed = (performance.now() - t0).toFixed(1);
+    const selectedText = operationSelect.options[operationSelect.selectedIndex].text;
+    resultTitle.textContent = selectedText;
+
+    const refData = cleanImageData ? cleanImageData.data : srcData;
+    const m = computeMetrics(refData, out, width, height);
+    metricsBox.style.display = "inline-block";
+    metricsBox.innerHTML =
+        `<strong>Độ sắc nét (Laplacian):</strong> ${m.sharpness} &nbsp;|&nbsp; ` +
+        `<strong>MAE so với ảnh gốc:</strong> ${m.mae} &nbsp;|&nbsp; ` +
+        `<strong>MSE:</strong> ${m.mse} &nbsp;|&nbsp; ` +
+        `<strong>Thời gian:</strong> ${elapsed} ms`;
+    statusText.textContent = `Hoàn tất xử lý "${selectedText}" trong ${elapsed} ms.`;
+}
+
+runButton.addEventListener("click", runProcessing);
+
+downloadButton.addEventListener("click", function() {
+    if (!resultReady) return;
+    const op = operationSelect.value;
+    const link = document.createElement("a");
+    link.download = `lab2_${op}.png`;
+    link.href = resultCanvas.toDataURL("image/png");
+    link.click();
+});
+</script>
+</body>
+</html>
